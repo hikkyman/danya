@@ -135,7 +135,7 @@ function mergeStatic(root, keep = () => false) {
     }
     gone.push(o);
   });
-  for (const o of gone) o.parent.remove(o);
+  for (const o of gone) { o.parent.remove(o); if (o.userData.ownGeo) o.geometry.dispose(); }
   const made = [];
   for (const b of buckets.values()) {
     const mesh = new THREE.Mesh(mergeGeometries(b.geos, false), b.mm);
@@ -369,7 +369,7 @@ function addWheels(g, halfW, zs) {
 }
 // Готовые модели машин (Kenney Car Kit, CC0). Пока не загрузились — рисуются коробки.
 const CAR_FILES = {
-  car: ['sedan', 'hatchback-sports', 'suv', 'suv-luxury'],                 // игрушечные такси, полиция и спорткар убраны: службы теперь свои
+  car: [],                                                                  // легковые теперь только отечественные (наборы ниже)
   van: ['van', 'delivery', 'truck', 'truck-flat', 'delivery-flat'],          // без «скорой», мусоровоза и пожарной из набора
 };
 const CAR_WIDTH = { car: 2.0, van: 2.25 };
@@ -388,6 +388,40 @@ for (const kind of Object.keys(CAR_FILES)) for (const name of CAR_FILES[kind]) {
     template.add(model);
     template.rotation.y = Math.PI; // капотом вперёд по ходу движения
     carModels[kind].push({ template, len: size.z * k, height: size.y * k });
+  });
+}
+// «Жигули», «Волги», «Нива» и другие из набора Low Poly Soviet Cars Pack (Vitaly Tyavin, Unity Asset Store).
+// Все машины красятся одной палитрой-картинкой; вершины кузова помечены в файле, и цвет меняется сдвигом их координат в палитре.
+const USSR_FILES = ['vz01', 'vz02', 'vz03', 'vz04', 'vz05', 'vz05r', 'vz06', 'vz07', 'vz08', 'vz09', 'vz099', 'vz21', 'vz31', 'gz21', 'gz24'];
+const USSR_WIDTH = { gz21: 1.85, gz24: 1.85, vz21: 1.75 };
+const USSR_PALETTE = { white: [0.945, 0.28], red: [0.278, 0.78], blue: [0.5, 0.78], green: [0.055, 0.78], yellow: [0.385, 0.78], black: [0.94, 0.79], gray: [0.725, 0.78], sand: [0.838, 0.79], purple: [0.61, 0.78], lightblue: [0.168, 0.79] };
+const USSR_COLORS = ['white', 'white', 'red', 'red', 'blue', 'green', 'green', 'yellow', 'black', 'gray', 'gray', 'sand', 'sand', 'purple', 'lightblue', 'lightblue'];
+const ussrTex = new THREE.TextureLoader().load('models/cars/ussr/albedo.png');
+ussrTex.colorSpace = THREE.SRGBColorSpace; ussrTex.flipY = false; ussrTex.magFilter = ussrTex.minFilter = THREE.NearestFilter; ussrTex.generateMipmaps = false;
+const ussrMat = new THREE.MeshLambertMaterial({ map: ussrTex, flatShading: true });
+for (const name of USSR_FILES) gltfLoader.load(`models/cars/ussr/${name}.glb`, (gltf) => {
+  const m = gltf.scene;
+  m.traverse((o) => { if (o.isMesh) o.material = ussrMat; });
+  const pivot = new THREE.Group(); pivot.add(m);
+  const s0 = new THREE.Box3().setFromObject(pivot).getSize(new THREE.Vector3());
+  if (s0.x > s0.z) m.rotation.y += Math.PI / 2;
+  const s1 = new THREE.Box3().setFromObject(pivot).getSize(new THREE.Vector3()), k = (USSR_WIDTH[name] ?? 1.7) / s1.x;
+  pivot.scale.setScalar(k);
+  const b = new THREE.Box3().setFromObject(pivot), c = b.getCenter(new THREE.Vector3());
+  pivot.position.set(-c.x, -b.min.y, -c.z);
+  const template = new THREE.Group(); template.add(pivot);
+  template.rotation.y = USSR_TURN;
+  const entry = { template, len: s1.z * k, height: s1.y * k, uvPaint: true, name };
+  carModels.car.push(entry); ussrByName[name] = entry;
+});
+const USSR_TURN = Math.PI, ussrByName = {}; // в файлах машины смотрят назад
+function paintUssr(obj, color = pick(USSR_COLORS)) { // перекрасить кузов: помеченные вершины переезжают в нужную клетку палитры
+  const [u, v] = USSR_PALETTE[color];
+  obj.traverse((o) => {
+    const flag = o.isMesh && o.geometry.attributes._paint; if (!flag) return;
+    const geo = o.geometry.clone(), uv = geo.attributes.uv.clone();
+    for (let i = 0; i < flag.count; i++) if (flag.getX(i) > 0.5) uv.setXY(i, u, v);
+    geo.setAttribute('uv', uv); o.geometry = geo; o.userData.ownGeo = true;
   });
 }
 // Советские и российские машины из набора пользователя: «копейка», «Таврия», УАЗ-469, грузовая «Газель», автобус ЛиАЗ-677
@@ -745,7 +779,7 @@ function makeVehicle(kind) {
   const g = new THREE.Group();
   if (kind !== 'bus' && carModels[kind].length) {
     const m = pick(carModels[kind]);
-    const body = m.template.clone(); if (m.paint) paintCar(body, m.paint);
+    const body = m.template.clone(); if (m.paint) paintCar(body, m.paint); if (m.uvPaint) paintUssr(body);
     g.add(body);
     g.userData = { type: 'vehicle', halfLen: m.len / 2, height: m.height, moving: true };
     return g;
@@ -2860,6 +2894,6 @@ function debugChunks(list) {
     castShadows(g); g.position.z = z; scene.add(g); chunks.push(g);
   });
 }
-window.__dbg = { debugChunks, makeService, person, renderer, carModels, makeLiaz, tower, panel9, scene, cam: null, bend, makeBus, makeSemi, makePhotoVehicle, crash, updateCrash, caught, updateCaught, spawnOncoming, modeAt, chunks: () => chunks, woman, update, move, jump, duck, start, makeVehicle, applyBonus, place, makeGate, makeRampTruck, makeBonus, things: () => things, bike }; // для автотестов
+window.__dbg = { debugChunks, ussrByName, makeService, person, renderer, carModels, makeLiaz, tower, panel9, scene, cam: null, bend, makeBus, makeSemi, makePhotoVehicle, crash, updateCrash, caught, updateCaught, spawnOncoming, modeAt, chunks: () => chunks, woman, update, move, jump, duck, start, makeVehicle, applyBonus, place, makeGate, makeRampTruck, makeBonus, things: () => things, bike }; // для автотестов
 reset();
 frame();
