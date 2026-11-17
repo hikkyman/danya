@@ -1548,6 +1548,29 @@ function panel9(side) { // девятиэтажка длинной сторон�
   for (const z of [-9, 9]) g.add(box(2.2, 1.4, 2.2, 0x8a8f96, side * 2, P9.h + 1.0, z));
   return g;
 }
+// Дома из набора Russian buildings pack (MadMedicSoft, Unity Asset Store): девятиэтажки и пятиэтажки.
+// У всех фасадов одна раскладка картинки, поэтому любой дом можно «одеть» в любой из девяти вариантов отделки.
+const PACK_HOUSES = { p9: ['b9et_01', 'b9et_02', 'b9et_03'], p5: ['b5et_01', 'b5et_03', 'b5et_04', 'b5et_06'] };
+const PACK_SKINS = ['01', '04', '05', '07', '09', '12', '14', '16', '17'];
+const packMats = PACK_SKINS.map((n) => { const t = new THREE.TextureLoader().load(`models/houses/t${n}.jpg`); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.wrapS = t.wrapT = THREE.RepeatWrapping; return new THREE.MeshLambertMaterial({ map: t }); });
+const packModels = { p9: [], p5: [] };
+for (const kind of Object.keys(PACK_HOUSES)) for (const name of PACK_HOUSES[kind]) gltfLoader.load(`models/houses/${name}.glb`, (gltf) => {
+  const m = gltf.scene; m.scale.setScalar(0.3); m.rotation.y = Math.PI / 2; // в наборе 1 единица ≈ 0,3 м; длинной стороной вдоль дороги
+  const pivot = new THREE.Group(); pivot.add(m);
+  const b = new THREE.Box3().setFromObject(pivot), c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
+  m.position.set(-c.x, -b.min.y, -c.z);
+  packModels[kind].push({ pivot, size });
+});
+let lastSkin = -1;
+function packHouse(kind, side) { // дом из набора со случайной отделкой, не такой, как у предыдущего
+  const src = pick(packModels[kind]), g = new THREE.Group(), m = src.pivot.clone();
+  let skin; do { skin = Math.floor(Math.random() * packMats.length); } while (skin === lastSkin); lastSkin = skin;
+  m.traverse((o) => { if (o.isMesh) o.material = packMats[skin]; });
+  if (side < 0) m.rotation.y = Math.PI;                                      // подъездами к дороге с обеих сторон
+  const ao = blob(src.size.x + 4, src.size.z + 4, 0.6); ao.position.y = 0.04;
+  g.add(m, ao);
+  return g;
+}
 function longHouse(side, zs = [-13, 0, 13], step = 2.6) { // длинная панелька в 12–14 этажей: секции уступами, как на картах Одинцова
   const g = new THREE.Group(), v = Math.floor(Math.random() * 3), floors = pick([12, 14]), dir = Math.random() < 0.5 ? 1 : -1;
   const wall = [0xe9dfc4, 0xe4dcc8, 0xded6bd][v];
@@ -2145,9 +2168,9 @@ function buildSide(g, biome, side, extra) {
   const add = (o, d, z) => addAt(o, d >= 9 ? d + SHIFT : d, z); // всё, что дальше тротуара, отодвинуто: у дороги теперь полоса деревьев
   const addTower = (prefs, d, z) => { // жилой дом второй линией: не такой, как предыдущий на этой стороне и как тот, что напротив
     const ok = (st) => st !== lastTower[side] && st !== lastTower[-side];
-    const list = [].concat(prefs).filter((k) => k !== 'green' || side < 0), st = pick(list.filter(ok).length ? list.filter(ok) : ['ii68', 'long', 'panel9', 'panel', 'brick'].filter(ok));
+    const list = [].concat(prefs).filter((k) => k !== 'green' || side < 0), st = pick(list.filter(ok).length ? list.filter(ok) : ['ii68', 'long', 'panel9', 'panel', 'brick', 'p9', 'p9', 'p5'].filter(ok));
     lastTower[side] = st;
-    const longish = st === 'slab' || st === 'long' || st === 'panel9', far = Math.max(d, 38), r = Math.random();
+    const longish = st === 'slab' || st === 'long' || st === 'panel9' || st === 'p9' || st === 'p5', far = Math.max(d, 38), r = Math.random();
     if (st === 'ii68' && r < 0.45) {            // три башни уступом, торцами к дороге — как стоят кварталы вдоль Можайского шоссе
       const dir = Math.random() < 0.5 ? 1 : -1;
       [-13.5, 0, 13.5].forEach((tz, i) => { const t = tower('ii68'); t.rotation.y = Math.PI / 2; t.scale.set(0.8, 1, 0.8); addHouse(t, far + 9 + dir * (i - 1) * 7, tz); });
@@ -2163,7 +2186,10 @@ function buildSide(g, biome, side, extra) {
     } else if (st === 'long' && r > 0.65) {     // два крыла буквой V
       const open = Math.random() < 0.5 ? 1 : -1, ang = rand(0.5, 0.7);
       for (const w of [-1, 1]) { const wing = longHouse(side, [-6.5, 6.5], 0); wing.rotation.y = w * open * ang * side; addHouse(wing, far + 9, w * 10.5); }
-    } else addHouse(st === 'panel9' ? panel9(side) : st === 'long' ? longHouse(side) : tower(st), far, longish ? 0 : z);
+    } else if ((st === 'p9' || st === 'p5') && packModels[st].length) {  // дом из набора: вдоль дороги или под углом
+      const h = packHouse(st, side); if (r > 0.75) h.rotation.y = (Math.random() < 0.5 ? 1 : -1) * rand(0.4, 0.7);
+      addHouse(h, far + (r > 0.75 ? 10 : 2), 0);
+    } else addHouse(st === 'panel9' || st === 'p9' || st === 'p5' ? panel9(side) : st === 'long' ? longHouse(side) : tower(st), far, longish ? 0 : z);
   };
   const park = (d0, d1, zc, halfZ) => { // сквер: дорожки крест-накрест, деревья, скамейки
     const mid = (d0 + d1) / 2, len = Math.hypot(d1 - d0, halfZ * 2);
@@ -2204,7 +2230,7 @@ function buildSide(g, biome, side, extra) {
   const trees = (n, d0, d1, z0 = -19, z1 = 19) => { for (let i = 0; i < n; i++) add(tree(Math.random() < 0.75 ? 'birch' : 'fir'), rand(d0, d1), rand(z0, z1)); };
   if (biome === 'prospekt') {          // розовая пристройка или центр с красным верхом, за ними панельные башни
     if (side > 0) add(annex(side), 14.5, 0); else add(redTopCenter(side), 15.5, 0); // розовое здание всегда справа
-    addTower(['ii68', 'long', 'panel'], 38, rand(-4, 4));
+    addTower(['ii68', 'long', 'panel', 'p9'], 38, rand(-4, 4));
     if (Math.random() < 0.4) stop(8);
     if (Math.random() < 0.5) add(railing(), 5.75, 0);
   } else if (biome === 'stela') {      // стела «Одинцово» у дороги, рядом ларьки
@@ -2216,7 +2242,7 @@ function buildSide(g, biome, side, extra) {
   } else if (biome === 'dvor') {       // двор с панельной девятиэтажкой: деревья, машины у подъездов, иногда киоск
     shopRow(0.7);
     trees(5, 19, 26);
-    addTower(['panel9', 'ii68', 'long'], 35, 0);
+    addTower(['panel9', 'ii68', 'long', 'p9', 'p5'], 35, 0);
     if (Math.random() < 0.3) stop(-8);
   } else if (biome === 'kirpich') {    // кирпично-оранжевые башни, перед ними жёлтые магазинчики
     addTower(['brick', 'long'], 38, rand(-5, 5));
@@ -2224,7 +2250,7 @@ function buildSide(g, biome, side, extra) {
     else { add(archCanopy(), 16, -8); add(pavilion('apteka', side), 12.5, 10); trees(3, 11, 20, -4, 4); }
     if (Math.random() < 0.3) stop(-12);
   } else if (biome === 'slab') {       // длинные 12-этажки с цветными фасадами за деревьями
-    addTower(['slab', 'long'], 35, 0);
+    addTower(['slab', 'long', 'p9'], 35, 0);
     shopRow(0.5);
     trees(6, 18, 26);
     if (Math.random() < 0.4) add(billboard(), 10.2, rand(-10, 10));
@@ -2247,7 +2273,7 @@ function buildSide(g, biome, side, extra) {
     if (Math.random() < 0.4) add(billboard(), 10.2, 17);
   } else if (biome === 'larki') {      // ряд павильонов и киосков, за ними башни
     for (const z of [-13, 0, 13]) add(pavilion(freshShop(['coffee', 'grill', 'zoo', 'burger', 'apteka', 'kiosk']), side), 12.5, z);
-    addTower(['ii68', 'long', 'panel9', 'panel', 'brick'], 36, 0);
+    addTower(['ii68', 'long', 'panel9', 'panel', 'brick', 'p9', 'p5'], 36, 0);
     if (Math.random() < 0.5) stop(0);
   } else if (biome === 'garazhi') {
     add(box(0.25, 2.2, CHUNK_LEN, 0xa5a59c, 0, 1.1, 0), 9.6, 0);            // бетонный забор
@@ -2894,6 +2920,6 @@ function debugChunks(list) {
     castShadows(g); g.position.z = z; scene.add(g); chunks.push(g);
   });
 }
-window.__dbg = { debugChunks, ussrByName, makeService, person, renderer, carModels, makeLiaz, tower, panel9, scene, cam: null, bend, makeBus, makeSemi, makePhotoVehicle, crash, updateCrash, caught, updateCaught, spawnOncoming, modeAt, chunks: () => chunks, woman, update, move, jump, duck, start, makeVehicle, applyBonus, place, makeGate, makeRampTruck, makeBonus, things: () => things, bike }; // для автотестов
+window.__dbg = { debugChunks, packHouse, packModels, ussrByName, makeService, person, renderer, carModels, makeLiaz, tower, panel9, scene, cam: null, bend, makeBus, makeSemi, makePhotoVehicle, crash, updateCrash, caught, updateCaught, spawnOncoming, modeAt, chunks: () => chunks, woman, update, move, jump, duck, start, makeVehicle, applyBonus, place, makeGate, makeRampTruck, makeBonus, things: () => things, bike }; // для автотестов
 reset();
 frame();
