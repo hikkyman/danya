@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Просмотр героя</title>
+    <style>html,body{margin:0;height:100%;overflow:hidden;background:#cfd8e3}</style>
+  </head>
+  <body>
+    <script type="module">
+      // Служебная страница для подгонки героя.
+      // Параметры: ?a=угол камеры в градусах, ?d=дистанция, ?h=высота взгляда; без остальных параметров герой едет сам
+      import * as THREE from 'three';
+      import { loadHero } from '/src/hero.js';
+      import { loadChaser } from '/src/runner.js';
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(innerWidth, innerHeight);
+      document.body.appendChild(renderer.domElement);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xcfd8e3);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2));
+      const sun = new THREE.DirectionalLight(0xffffff, 2); sun.position.set(3, 5, 4); scene.add(sun);
+      scene.add(new THREE.GridHelper(6, 12, 0x888888, 0xaaaaaa));
+      const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 50);
+      const q = new URLSearchParams(location.search);
+      let angle = Number(q.get('a') ?? 90) * Math.PI / 180;
+      const dist = Number(q.get('d') ?? 4.2), lookY = Number(q.get('h') ?? 0.95);
+      // ?who=chaser — показать бегущую поклонницу (?p=фаза шага в градусах, ?close=0..1)
+      if (q.get('who') === 'chaser') {
+        const ch = await loadChaser();
+        window.__chaser = ch;
+        scene.add(ch.group);
+        const frozen = q.has('p');
+        if (frozen) { ch.state.phase = Number(q.get('p')) * Math.PI / 180; ch.state.close = Number(q.get('close') ?? 0); ch.pose(); }
+        (function loop() {
+          if (!q.has('a')) angle += 0.006;
+          if (!frozen) ch.update(1 / 60, { close: Number(q.get('close') ?? 0) });
+          camera.position.set(Math.sin(angle) * dist, lookY + 0.4, Math.cos(angle) * dist);
+          camera.lookAt(0, lookY, 0);
+          renderer.render(scene, camera);
+          requestAnimationFrame(loop);
+        })();
+        await new Promise(() => {});
+      }
+      const hero = await loadHero();
+      window.__hero = hero;
+      scene.add(hero.group);
+      // для стоп-кадров: ?c=угол шатунов, ?stand=1 стоя, ?sig=1 или -1 рука в сторону, ?lat=боковая скорость
+      const still = q.has('c') || q.has('stand') || q.has('sig') || q.has('tuck') || q.has('duck') || q.has('crash');
+      if (still) {
+        const st = hero.state;
+        st.angle = Number(q.get('c') ?? 35) * Math.PI / 180;
+        st.stand = Number(q.get('stand') ?? 0);
+        if (q.has('sig')) st.sig[Number(q.get('sig'))] = 1;
+        st.lat = Number(q.get('lat') ?? 0);
+        st.tuck = Number(q.get('tuck') ?? 0);
+        st.duck = Number(q.get('duck') ?? 0);
+        if (q.has('crash')) { hero.crash(1); st.crash = Number(q.get('crash')); if (st.crash > 0.5) st.crashLand = null; for (let t = 0; t <= st.crash + 1e-6; t += 1 / 60) { const keep = st.crash; st.crash = t; hero.poseCrash(); st.crash = keep; } hero.poseCrash(); }
+        if (!q.has('crash')) hero.pose();
+      }
+      function frame() {
+        if (!q.has('a')) angle += 0.006;
+        if (!still) hero.update(1 / 60, { step: 0.25 });
+        camera.position.set(Math.sin(angle) * dist, lookY + 0.4, Math.cos(angle) * dist);
+        camera.lookAt(0, lookY, 0);
+        renderer.render(scene, camera);
+        requestAnimationFrame(frame);
+      }
+      frame();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.DS_Store
+models/_downloads/
+pictures/
+models/generated/

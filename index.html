@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Велогонка по Одинцово</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #a9c4d8; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+      canvas { display: block; touch-action: none; }
+      #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,.6); }
+      #score, #coins { position: absolute; top: max(14px, env(safe-area-inset-top)); font-size: 26px; font-weight: 800; }
+      #score { left: 18px; }
+      #coins { right: 18px; }
+      #power { position: absolute; top: calc(max(14px, env(safe-area-inset-top)) + 36px); right: 18px; font-size: 22px; font-weight: 800; }
+      #alert { position: absolute; top: 64px; left: 0; right: 0; text-align: center; font-size: 24px; font-weight: 800; color: #ff5d8f; opacity: 0; transition: opacity .2s; }
+      #alert.on { opacity: 1; }
+      #warn { position: absolute; top: 100px; left: 0; right: 0; text-align: center; font-size: 22px; font-weight: 800; color: #ffd23f; opacity: 0; transition: opacity .15s; }
+      #warn.on { opacity: 1; }
+      #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 12px; background: linear-gradient(to bottom, rgba(20,25,35,.8), rgba(20,25,35,0) 30%, rgba(20,25,35,0) 52%, rgba(20,25,35,.85)); text-align: center; padding: 28px 20px 36px; box-sizing: border-box; }
+      #overlay h1 { position: absolute; top: max(26px, env(safe-area-inset-top)); left: 16px; right: 16px; }
+      #overlay.hidden { display: none; }
+      #overlay h1 { margin: 0; font-size: clamp(30px, 6vw, 56px); }
+      #overlay p { margin: 0; font-size: clamp(14px, 2vw, 18px); max-width: 620px; line-height: 1.35; }
+      #overlay #help { opacity: .8; font-size: clamp(12px, 1.7vw, 15px); }
+      #overlay .btn { margin-top: 10px; padding: 14px 34px; border-radius: 999px; background: #ff5d8f; font-size: 22px; font-weight: 800; text-shadow: none; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <div id="score">0 м</div>
+      <div id="coins">🪙 0</div>
+      <div id="power"></div>
+      <div id="warn">⚠ Встречная полоса!</div>
+      <div id="alert">❤ Она совсем близко!</div>
+      <div id="overlay">
+        <h1 id="title">Велогонка по Одинцово</h1>
+        <p id="subtitle">Уезжай от влюблённой поклонницы: объезжай машины, перепрыгивай ограждения, собирай монетки.</p>
+        <p id="help">← → или A D — полоса · ↑ / W / пробел — прыжок · ↓ / S — пригнуться<br />На телефоне — свайпы</p>
+        <div class="btn" id="startBtn">Поехали</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
